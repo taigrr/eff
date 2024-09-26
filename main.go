@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"time"
@@ -46,6 +47,12 @@ func main() {
 		fmt.Printf("Ping send failed: %v\n", err)
 	}
 	pinger.OnRecvError = func(err error) {
+		if neterr, ok := err.(*net.OpError); ok {
+			if neterr.Timeout() {
+				return
+			}
+		}
+
 		fmt.Printf("Ping recv failed: %v\n", err)
 	}
 	fmt.Printf("PING %s (%s):\n", pinger.Addr(), pinger.IPAddr())
