@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	pinger, err := probing.NewPinger("127.0.0.1")
+	pinger, err := probing.NewPinger("www.google.com")
 	if err != nil {
 		panic(err)
 	}
@@ -30,7 +30,6 @@ func main() {
 		}
 	}()
 	pinger.Interval = time.Second * 3
-	pinger.ResolveTimeout = time.Second * 3
 
 	pinger.OnRecv = func(pkt *probing.Packet) {
 		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%v\n",
