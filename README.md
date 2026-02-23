@@ -1,21 +1,78 @@
 # eff
 
-## Too many F's in the chat
+Network connectivity monitor. Continuously pings a target and sends desktop notifications when your connection drops or recovers.
 
-I'm a bad [streamer](https://www.twitch.tv/warp_tux), with a highly irregular schedule.
-Here's the thing--that's because my internet sucks.
+## Install
 
-Every step along the way, my Xfinity service, my Google WiFi router, my network portal online--they all say I'm getting 500mbps down and 30mbps up.
-But when I try to stream, I get 0.1-0.5mbps up.
-This is across several devices, and ethernet is not (currently) an option.
+```bash
+# From source
+go install github.com/taigrr/eff@latest
 
-## Under Construction
+# Or download from releases
+```
 
-This tool will serve two purposes:
+## Usage
 
-1. help me diagnose the broken part of the chain (I'm pretty sure it's the Google WiFi router to blame, not the Xfinity gateway!)
-1. notify me when my internet drops immediately (using dbus notifications, i.e. dunst) and when it's restored since video calls basically just drop out.
+```bash
+# Default: ping 1.1.1.1 every 3s, notify on state changes
+eff
 
-If you want to contribute, be my guest! Keep in mind this repo will serve my use case, I'm happy to support others.
+# Custom target and interval
+eff --interval 5s --threshold 5 8.8.8.8
 
-Inspired by [SmokePing](https://oss.oetiker.ch/smokeping/).
+# Disable notifications (log only)
+eff --notify=false
+
+# Debug mode (show each ping)
+eff --debug
+```
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--interval, -i` | `3s` | Ping interval |
+| `--threshold, -t` | `3` | Consecutive failures before declaring down |
+| `--notify, -n` | `true` | Send desktop notifications |
+| `--debug` | `false` | Show individual ping results |
+
+## How It Works
+
+1. Sends ICMP pings at the configured interval
+2. After N consecutive failures (threshold), declares the network **down**
+3. Sends a desktop notification (notify-send on Linux, osascript on macOS)
+4. When pings succeed again, declares the network **up** and reports downtime duration
+
+## Systemd Service
+
+Run as a persistent user service:
+
+```bash
+cp contrib/eff.service ~/.config/systemd/user/
+systemctl --user enable --now eff
+```
+
+See [contrib/README.md](contrib/README.md) for details.
+
+## Library Usage
+
+The monitor is importable:
+
+```go
+import "github.com/taigrr/eff/internal/monitor"
+
+m := monitor.New(monitor.Config{
+    Target:    "1.1.1.1",
+    Interval:  3 * time.Second,
+    Threshold: 3,
+    OnStateChange: func(e monitor.Event) {
+        fmt.Printf("Network %s\n", e.State)
+    },
+})
+
+m.Run(ctx)
+```
+
+## Background
+
+Built because Xfinity says 500mbps but streams at 0.1mbps. This tool tells you the moment your connection actually drops — no more wondering if it's you or the ISP.
