@@ -1,62 +1,107 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"net"
+	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"time"
 
-	probing "github.com/prometheus-community/pro-bing"
+	"github.com/charmbracelet/fang"
+	"github.com/spf13/cobra"
+
+	"github.com/taigrr/eff/internal/monitor"
 )
 
+var version = "dev"
+
 func main() {
-	pinger, err := probing.NewPinger("www.google.com")
-	if err != nil {
-		panic(err)
-	}
+	var (
+		target    string
+		interval  time.Duration
+		threshold int
+		notify    bool
+		debug     bool
+	)
 
-	// Ensure IPv4 is used
-	pinger.SetNetwork("ip4")
+	rootCmd := &cobra.Command{
+		Use:   "eff [target]",
+		Short: "Network connectivity monitor",
+		Long: `Eff continuously pings a target and alerts you when your network goes
+down or comes back up. Designed for diagnosing flaky connections.
 
-	// Set packet size (optional)
-	pinger.Size = 56 // Standard size for ICMP packets
-	// Listen for Ctrl-C.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		for range c {
-			pinger.Stop()
-		}
-	}()
-	pinger.Interval = time.Second * 3
-
-	pinger.OnRecv = func(pkt *probing.Packet) {
-		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%v\n",
-			pkt.Nbytes, pkt.IPAddr, pkt.Seq, pkt.Rtt)
-	}
-	pinger.OnFinish = func(stats *probing.Statistics) {
-		fmt.Printf("\n--- %s ping statistics ---\n", stats.Addr)
-		fmt.Printf("%d packets transmitted, %d packets received, %v%% packet loss\n",
-			stats.PacketsSent, stats.PacketsRecv, stats.PacketLoss)
-		fmt.Printf("round-trip min/avg/max/stddev = %v/%v/%v/%v\n",
-			stats.MinRtt, stats.AvgRtt, stats.MaxRtt, stats.StdDevRtt)
-	}
-	pinger.OnSendError = func(_ *probing.Packet, err error) {
-		fmt.Printf("Ping send failed: %v\n", err)
-	}
-	pinger.OnRecvError = func(err error) {
-		if neterr, ok := err.(*net.OpError); ok {
-			if neterr.Timeout() {
-				return
+Sends desktop notifications (via notify-send on Linux, osascript on macOS)
+when connectivity state changes.`,
+		Version: version,
+		Args:    cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				target = args[0]
 			}
-		}
 
-		fmt.Printf("Ping recv failed: %v\n", err)
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer cancel()
+
+			level := slog.LevelInfo
+			if debug {
+				level = slog.LevelDebug
+			}
+			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+
+			cfg := monitor.Config{
+				Target:    target,
+				Interval:  interval,
+				Threshold: threshold,
+				OnStateChange: func(e monitor.Event) {
+					switch e.State {
+					case monitor.StateDown:
+						msg := fmt.Sprintf("Network DOWN — %s unreachable", e.Target)
+						logger.Warn(msg)
+						if notify {
+							sendNotification("eff: Network Down", msg, "critical")
+						}
+					case monitor.StateUp:
+						msg := fmt.Sprintf("Network UP — %s reachable (was down for %s)",
+							e.Target, e.Duration.Round(time.Second))
+						logger.Info(msg)
+						if notify {
+							sendNotification("eff: Network Restored", msg, "normal")
+						}
+					}
+				},
+				OnPing: func(seq int, rtt time.Duration) {
+					logger.Debug("ping", "seq", seq, "rtt", rtt.Round(time.Microsecond))
+				},
+				OnError: func(err error) {
+					logger.Error("ping error", "error", err)
+				},
+			}
+
+			m := monitor.New(cfg)
+			logger.Info("monitoring", "target", cfg.Target, "interval", cfg.Interval, "threshold", cfg.Threshold)
+			return m.Run(ctx)
+		},
 	}
-	fmt.Printf("PING %s (%s):\n", pinger.Addr(), pinger.IPAddr())
-	err = pinger.Run()
-	if err != nil {
-		panic(err)
+
+	rootCmd.Flags().DurationVarP(&interval, "interval", "i", 3*time.Second, "Ping interval")
+	rootCmd.Flags().IntVarP(&threshold, "threshold", "t", 3, "Consecutive failures before declaring down")
+	rootCmd.Flags().BoolVarP(&notify, "notify", "n", true, "Send desktop notifications on state changes")
+	rootCmd.Flags().BoolVar(&debug, "debug", false, "Show individual ping results")
+
+	if err := fang.Execute(context.Background(), rootCmd); err != nil {
+		os.Exit(1)
+	}
+}
+
+func sendNotification(title, body, urgency string) {
+	switch runtime.GOOS {
+	case "linux":
+		exec.Command("notify-send", "-u", urgency, title, body).Run()
+	case "darwin":
+		script := fmt.Sprintf(`display notification %q with title %q`, body, title)
+		exec.Command("osascript", "-e", script).Run()
 	}
 }

@@ -1,0 +1,37 @@
+version: 2
+
+builds:
+  - binary: eff
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - contrib/*
+
+nfpms:
+  - package_name: eff
+    homepage: https://github.com/taigrr/eff
+    maintainer: Tai Groot <groot.tai@gmail.com>
+    description: Network connectivity monitor with desktop notifications
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: contrib/eff.service
+        dst: /usr/lib/systemd/user/eff.service
+        type: config
+
+release:
+  name_template: "v{{ .Version }}"
