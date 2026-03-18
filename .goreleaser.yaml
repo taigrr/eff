@@ -24,7 +24,7 @@ nfpms:
     homepage: https://github.com/taigrr/eff
     maintainer: Tai Groot <groot.tai@gmail.com>
     description: Network connectivity monitor with desktop notifications
-    license: MIT
+    license: 0BSD
     formats:
       - deb
       - rpm
