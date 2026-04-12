@@ -167,3 +167,153 @@ func TestNoCallbackOnFirstUp(t *testing.T) {
 		t.Errorf("expected no events on first up, got %d", len(events))
 	}
 }
+
+func TestNewAppliesDefaults(t *testing.T) {
+	m := New(Config{})
+	if m.cfg.Target != "1.1.1.1" {
+		t.Errorf("target = %q, want 1.1.1.1", m.cfg.Target)
+	}
+	if m.state != StateUnknown {
+		t.Errorf("initial state = %v, want unknown", m.state)
+	}
+}
+
+func TestStatsReturnsSnapshot(t *testing.T) {
+	m := New(Config{})
+	m.mu.Lock()
+	m.stats = Stats{
+		PacketsSent: 100,
+		PacketsRecv: 95,
+		PacketLoss:  5.0,
+		MinRTT:      1 * time.Millisecond,
+		AvgRTT:      5 * time.Millisecond,
+		MaxRTT:      20 * time.Millisecond,
+	}
+	m.mu.Unlock()
+
+	s := m.Stats()
+	if s.PacketsSent != 100 {
+		t.Errorf("PacketsSent = %d, want 100", s.PacketsSent)
+	}
+	if s.PacketsRecv != 95 {
+		t.Errorf("PacketsRecv = %d, want 95", s.PacketsRecv)
+	}
+	if s.PacketLoss != 5.0 {
+		t.Errorf("PacketLoss = %f, want 5.0", s.PacketLoss)
+	}
+}
+
+func TestDownStayDownOnMoreFailures(t *testing.T) {
+	var eventCount int
+	m := New(Config{
+		Threshold: 2,
+		OnStateChange: func(e Event) {
+			eventCount++
+		},
+	})
+	m.mu.Lock()
+	m.state = StateUp
+	m.mu.Unlock()
+
+	// Trigger transition to down
+	m.handleFailure()
+	m.handleFailure()
+	if eventCount != 1 {
+		t.Fatalf("expected 1 event after threshold, got %d", eventCount)
+	}
+
+	// Additional failures should NOT fire more events
+	m.handleFailure()
+	m.handleFailure()
+	m.handleFailure()
+	if eventCount != 1 {
+		t.Errorf("expected still 1 event after extra failures, got %d", eventCount)
+	}
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	m := New(Config{
+		Threshold: 3,
+		OnStateChange: func(e Event) {},
+		OnPing:        func(seq int, rtt time.Duration) {},
+	})
+	m.mu.Lock()
+	m.state = StateUp
+	m.mu.Unlock()
+
+	done := make(chan struct{})
+
+	// Concurrent failures
+	go func() {
+		for range 100 {
+			m.handleFailure()
+		}
+		done <- struct{}{}
+	}()
+
+	// Concurrent receives
+	go func() {
+		for range 100 {
+			m.handleRecv(&probing.Packet{Seq: 1, Rtt: time.Millisecond})
+		}
+		done <- struct{}{}
+	}()
+
+	// Concurrent state reads
+	go func() {
+		for range 100 {
+			_ = m.State()
+			_ = m.Stats()
+		}
+		done <- struct{}{}
+	}()
+
+	<-done
+	<-done
+	<-done
+}
+
+func TestUpEventIncludesDownSince(t *testing.T) {
+	var event Event
+	m := New(Config{
+		OnStateChange: func(e Event) {
+			event = e
+		},
+	})
+
+	downTime := time.Now().Add(-30 * time.Second)
+	m.mu.Lock()
+	m.state = StateDown
+	m.downSince = downTime
+	m.mu.Unlock()
+
+	m.handleRecv(&probing.Packet{Seq: 1, Rtt: time.Millisecond})
+
+	if event.DownSince != downTime {
+		t.Errorf("DownSince = %v, want %v", event.DownSince, downTime)
+	}
+	if event.Target != "1.1.1.1" {
+		t.Errorf("Target = %q, want 1.1.1.1", event.Target)
+	}
+}
+
+func TestThresholdOneImmediateDown(t *testing.T) {
+	var events []Event
+	m := New(Config{
+		Threshold: 1,
+		OnStateChange: func(e Event) {
+			events = append(events, e)
+		},
+	})
+	m.mu.Lock()
+	m.state = StateUp
+	m.mu.Unlock()
+
+	m.handleFailure()
+	if m.State() != StateDown {
+		t.Errorf("state = %v, want down with threshold=1", m.State())
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+}
