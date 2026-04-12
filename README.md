@@ -59,7 +59,7 @@ See [contrib/README.md](contrib/README.md) for details.
 The monitor is importable:
 
 ```go
-import "github.com/taigrr/eff/internal/monitor"
+import "github.com/taigrr/eff/monitor"
 
 m := monitor.New(monitor.Config{
     Target:    "1.1.1.1",

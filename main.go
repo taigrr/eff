@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 
-	"github.com/taigrr/eff/internal/monitor"
+	"github.com/taigrr/eff/monitor"
 )
 
 var version = "dev"
