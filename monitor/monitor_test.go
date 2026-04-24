@@ -233,7 +233,7 @@ func TestDownStayDownOnMoreFailures(t *testing.T) {
 
 func TestConcurrentAccess(t *testing.T) {
 	m := New(Config{
-		Threshold: 3,
+		Threshold:     3,
 		OnStateChange: func(e Event) {},
 		OnPing:        func(seq int, rtt time.Duration) {},
 	})
@@ -315,5 +315,35 @@ func TestThresholdOneImmediateDown(t *testing.T) {
 	}
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+}
+
+func TestConfigValidateRejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  Config
+	}{
+		{name: "empty target", cfg: Config{Target: "", Interval: time.Second, Threshold: 1}},
+		{name: "zero interval", cfg: Config{Target: "1.1.1.1", Interval: 0, Threshold: 1}},
+		{name: "negative interval", cfg: Config{Target: "1.1.1.1", Interval: -time.Second, Threshold: 1}},
+		{name: "zero threshold", cfg: Config{Target: "1.1.1.1", Interval: time.Second, Threshold: 0}},
+		{name: "negative threshold", cfg: Config{Target: "1.1.1.1", Interval: time.Second, Threshold: -1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.cfg.Validate(); err == nil {
+				t.Fatalf("Validate() error = nil, want error")
+			}
+		})
+	}
+}
+
+func TestConfigValidateAcceptsDefaults(t *testing.T) {
+	cfg := Config{}
+	cfg.defaults()
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
 	}
 }

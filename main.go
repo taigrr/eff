@@ -80,6 +80,13 @@ when connectivity state changes.`,
 				},
 			}
 
+			if interval <= 0 {
+				return fmt.Errorf("interval must be positive, got %s", interval)
+			}
+			if threshold < 1 {
+				return fmt.Errorf("threshold must be at least 1, got %d", threshold)
+			}
+
 			m := monitor.New(cfg)
 			logger.Info("monitoring", "target", cfg.Target, "interval", cfg.Interval, "threshold", cfg.Threshold)
 			return m.Run(ctx)
