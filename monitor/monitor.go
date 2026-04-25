@@ -5,6 +5,7 @@ package monitor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -93,6 +94,20 @@ func (c *Config) defaults() {
 	}
 }
 
+// Validate reports whether the configuration is internally consistent.
+func (c Config) Validate() error {
+	if c.Target == "" {
+		return errors.New("target cannot be empty")
+	}
+	if c.Interval <= 0 {
+		return fmt.Errorf("interval must be positive, got %s", c.Interval)
+	}
+	if c.Threshold < 1 {
+		return fmt.Errorf("threshold must be at least 1, got %d", c.Threshold)
+	}
+	return nil
+}
+
 // Monitor continuously pings a target and reports connectivity changes.
 type Monitor struct {
 	cfg   Config
@@ -112,6 +127,10 @@ func New(cfg Config) *Monitor {
 
 // Run starts the monitor and blocks until the context is cancelled.
 func (m *Monitor) Run(ctx context.Context) error {
+	if err := m.cfg.Validate(); err != nil {
+		return err
+	}
+
 	pinger, err := probing.NewPinger(m.cfg.Target)
 	if err != nil {
 		return fmt.Errorf("creating pinger for %s: %w", m.cfg.Target, err)
