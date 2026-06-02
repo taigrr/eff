@@ -111,11 +111,13 @@ func buildConfig(args []string, opts options) (monitor.Config, *slog.Logger, err
 			logger.Error("ping error", "error", err)
 		},
 	}
-	if cfg.Target == "" {
-		cfg.Target = "1.1.1.1"
+	if cfg.Interval <= 0 {
+		return monitor.Config{}, nil, fmt.Errorf("interval must be positive, got %s", cfg.Interval)
 	}
-
-	if err := cfg.Validate(); err != nil {
+	if cfg.Threshold < 1 {
+		return monitor.Config{}, nil, fmt.Errorf("threshold must be at least 1, got %d", cfg.Threshold)
+	}
+	if err := cfg.Normalize(); err != nil {
 		return monitor.Config{}, nil, err
 	}
 
