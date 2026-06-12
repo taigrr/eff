@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -104,5 +105,80 @@ func TestNewRootCmdReturnsRunnerError(t *testing.T) {
 
 	if err := cmd.Execute(); !errors.Is(err, want) {
 		t.Fatalf("Execute() error = %v, want %v", err, want)
+	}
+}
+
+func TestMonitorSignalsIncludeInterruptAndTerminate(t *testing.T) {
+	signals := monitorSignals()
+
+	if len(signals) != 2 {
+		t.Fatalf("len(monitorSignals()) = %d, want 2", len(signals))
+	}
+	if signals[0] != os.Interrupt {
+		t.Fatalf("signals[0] = %v, want %v", signals[0], os.Interrupt)
+	}
+	if signals[1].String() != "terminated" {
+		t.Fatalf("signals[1] = %q, want terminated", signals[1])
+	}
+}
+
+func TestNotificationCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		goos    string
+		title   string
+		body    string
+		urgency string
+		wantNil bool
+		want    []string
+	}{
+		{
+			name:    "linux uses notify-send",
+			goos:    "linux",
+			title:   "eff: Network Down",
+			body:    "Network DOWN — 1.1.1.1 unreachable",
+			urgency: "critical",
+			want:    []string{"notify-send", "-u", "critical", "eff: Network Down", "Network DOWN — 1.1.1.1 unreachable"},
+		},
+		{
+			name:    "darwin uses osascript",
+			goos:    "darwin",
+			title:   "eff: Network Restored",
+			body:    "Network UP — 1.1.1.1 reachable",
+			urgency: "normal",
+			want:    []string{"osascript", "-e", `display notification "Network UP — 1.1.1.1 reachable" with title "eff: Network Restored"`},
+		},
+		{
+			name:    "unsupported OS returns nil",
+			goos:    "windows",
+			title:   "ignored",
+			body:    "ignored",
+			urgency: "normal",
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := notificationCommand(tt.goos, tt.title, tt.body, tt.urgency)
+			if tt.wantNil {
+				if cmd != nil {
+					t.Fatalf("notificationCommand() = %v, want nil", cmd.Args)
+				}
+				return
+			}
+
+			if cmd == nil {
+				t.Fatal("notificationCommand() = nil, want command")
+			}
+			if len(cmd.Args) != len(tt.want) {
+				t.Fatalf("len(cmd.Args) = %d, want %d (%v)", len(cmd.Args), len(tt.want), cmd.Args)
+			}
+			for index, want := range tt.want {
+				if cmd.Args[index] != want {
+					t.Fatalf("cmd.Args[%d] = %q, want %q", index, cmd.Args[index], want)
+				}
+			}
+		})
 	}
 }

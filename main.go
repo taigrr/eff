@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/fang"
@@ -56,7 +57,7 @@ when connectivity state changes.`,
 				return err
 			}
 
-			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			ctx, cancel := signal.NotifyContext(context.Background(), monitorSignals()...)
 			defer cancel()
 
 			logger.Info("monitoring", "target", cfg.Target, "interval", cfg.Interval, "threshold", cfg.Threshold)
@@ -122,12 +123,26 @@ func buildConfig(args []string, opts options) (monitor.Config, *slog.Logger, err
 	return cfg, logger, nil
 }
 
+func monitorSignals() []os.Signal {
+	return []os.Signal{os.Interrupt, syscall.SIGTERM}
+}
+
 func sendNotification(title, body, urgency string) {
-	switch runtime.GOOS {
+	cmd := notificationCommand(runtime.GOOS, title, body, urgency)
+	if cmd == nil {
+		return
+	}
+	_ = cmd.Run()
+}
+
+func notificationCommand(goos, title, body, urgency string) *exec.Cmd {
+	switch goos {
 	case "linux":
-		exec.Command("notify-send", "-u", urgency, title, body).Run()
+		return exec.Command("notify-send", "-u", urgency, title, body)
 	case "darwin":
 		script := fmt.Sprintf(`display notification %q with title %q`, body, title)
-		exec.Command("osascript", "-e", script).Run()
+		return exec.Command("osascript", "-e", script)
+	default:
+		return nil
 	}
 }
