@@ -49,10 +49,12 @@ Run as a persistent user service:
 
 ```bash
 cp contrib/eff.service ~/.config/systemd/user/
+systemctl --user daemon-reload
 systemctl --user enable --now eff
 ```
 
-See [contrib/README.md](contrib/README.md) for details.
+The bundled unit is designed for `systemctl --user` and sets the desktop session environment needed for `notify-send`.
+See [contrib/README.md](contrib/README.md) for details and troubleshooting.
 
 ## Library Usage
 

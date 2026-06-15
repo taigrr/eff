@@ -37,6 +37,17 @@ ExecStart=
 ExecStart=/usr/bin/eff --interval 5s --threshold 5 8.8.8.8
 ```
 
+### Notifications in user services
+
+The bundled `eff.service` is meant to run as a **user** unit, not a system-wide service.
+It sets `DISPLAY`, `DBUS_SESSION_BUS_ADDRESS`, and `XDG_RUNTIME_DIR` so `notify-send` can reach your desktop session.
+If notifications still do not appear, confirm the service is running under your user account:
+
+```bash
+systemctl --user status eff
+systemctl --user show-environment | grep -E 'DISPLAY|DBUS_SESSION_BUS_ADDRESS|XDG_RUNTIME_DIR'
+```
+
 ### ICMP Permissions
 
 For unprivileged ICMP (no raw sockets), eff uses UDP pings by default.

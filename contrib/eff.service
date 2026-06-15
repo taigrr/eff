@@ -19,9 +19,11 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 
-# Pass DBUS session for desktop notifications
-# (only works as user service: systemctl --user enable eff)
+# Pass desktop session details for notifications.
+# This unit is intended to run as a user service (`systemctl --user ...`).
 Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+Environment=XDG_RUNTIME_DIR=%t
 
 [Install]
 WantedBy=default.target
