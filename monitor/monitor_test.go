@@ -1,6 +1,8 @@
 package monitor
 
 import (
+	"errors"
+	"net"
 	"testing"
 	"time"
 
@@ -345,5 +347,93 @@ func TestConfigValidateAcceptsDefaults(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v, want nil", err)
+	}
+}
+
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return false }
+
+func TestRecvTimeoutErrorCountsFailureWithoutCallback(t *testing.T) {
+	var (
+		events     []Event
+		errorCalls int
+	)
+
+	m := New(Config{
+		Threshold: 1,
+		OnStateChange: func(e Event) {
+			events = append(events, e)
+		},
+		OnError: func(err error) {
+			errorCalls++
+		},
+	})
+	m.mu.Lock()
+	m.state = StateUp
+	m.mu.Unlock()
+
+	m.pingerRecvError(&net.OpError{Err: timeoutErr{}})
+
+	if m.State() != StateDown {
+		t.Fatalf("state = %v, want down", m.State())
+	}
+	if errorCalls != 0 {
+		t.Fatalf("OnError calls = %d, want 0", errorCalls)
+	}
+	if len(events) != 1 || events[0].State != StateDown {
+		t.Fatalf("events = %+v, want single down event", events)
+	}
+}
+
+func TestRecvNonTimeoutErrorInvokesCallback(t *testing.T) {
+	var got error
+	m := New(Config{
+		Threshold: 2,
+		OnError: func(err error) {
+			got = err
+		},
+	})
+	m.mu.Lock()
+	m.state = StateUp
+	m.mu.Unlock()
+
+	m.pingerRecvError(errors.New("boom"))
+
+	if got == nil {
+		t.Fatal("OnError was not called")
+	}
+	if got.Error() != "recv: boom" {
+		t.Fatalf("OnError = %q, want %q", got.Error(), "recv: boom")
+	}
+	if m.State() != StateUp {
+		t.Fatalf("state = %v, want up before threshold", m.State())
+	}
+}
+
+func TestSendErrorInvokesCallbackAndCountsFailure(t *testing.T) {
+	var got error
+	m := New(Config{
+		Threshold: 1,
+		OnError: func(err error) {
+			got = err
+		},
+	})
+	m.mu.Lock()
+	m.state = StateUp
+	m.mu.Unlock()
+
+	m.pingerSendError(&probing.Packet{}, errors.New("send failed"))
+
+	if got == nil {
+		t.Fatal("OnError was not called")
+	}
+	if got.Error() != "send: send failed" {
+		t.Fatalf("OnError = %q, want %q", got.Error(), "send: send failed")
+	}
+	if m.State() != StateDown {
+		t.Fatalf("state = %v, want down after threshold", m.State())
 	}
 }

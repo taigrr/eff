@@ -141,40 +141,10 @@ func (m *Monitor) Run(ctx context.Context) error {
 	pinger.Interval = m.cfg.Interval
 	pinger.SetPrivileged(m.cfg.Privileged)
 
-	pinger.OnRecv = func(pkt *probing.Packet) {
-		m.handleRecv(pkt)
-	}
-
-	pinger.OnFinish = func(stats *probing.Statistics) {
-		m.mu.Lock()
-		m.stats = Stats{
-			PacketsSent: stats.PacketsSent,
-			PacketsRecv: stats.PacketsRecv,
-			PacketLoss:  stats.PacketLoss,
-			MinRTT:      stats.MinRtt,
-			AvgRTT:      stats.AvgRtt,
-			MaxRTT:      stats.MaxRtt,
-		}
-		m.mu.Unlock()
-	}
-
-	pinger.OnSendError = func(_ *probing.Packet, err error) {
-		m.handleFailure()
-		if m.cfg.OnError != nil {
-			m.cfg.OnError(fmt.Errorf("send: %w", err))
-		}
-	}
-
-	pinger.OnRecvError = func(err error) {
-		if neterr, ok := err.(*net.OpError); ok && neterr.Timeout() {
-			m.handleFailure()
-			return
-		}
-		m.handleFailure()
-		if m.cfg.OnError != nil {
-			m.cfg.OnError(fmt.Errorf("recv: %w", err))
-		}
-	}
+	pinger.OnRecv = m.handleRecv
+	pinger.OnFinish = m.handleFinish
+	pinger.OnSendError = m.pingerSendError
+	pinger.OnRecvError = m.pingerRecvError
 
 	go func() {
 		<-ctx.Done()
@@ -196,6 +166,37 @@ func (m *Monitor) Stats() Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.stats
+}
+
+func (m *Monitor) handleFinish(stats *probing.Statistics) {
+	m.mu.Lock()
+	m.stats = Stats{
+		PacketsSent: stats.PacketsSent,
+		PacketsRecv: stats.PacketsRecv,
+		PacketLoss:  stats.PacketLoss,
+		MinRTT:      stats.MinRtt,
+		AvgRTT:      stats.AvgRtt,
+		MaxRTT:      stats.MaxRtt,
+	}
+	m.mu.Unlock()
+}
+
+func (m *Monitor) pingerSendError(_ *probing.Packet, err error) {
+	m.handleFailure()
+	if m.cfg.OnError != nil {
+		m.cfg.OnError(fmt.Errorf("send: %w", err))
+	}
+}
+
+func (m *Monitor) pingerRecvError(err error) {
+	if neterr, ok := err.(*net.OpError); ok && neterr.Timeout() {
+		m.handleFailure()
+		return
+	}
+	m.handleFailure()
+	if m.cfg.OnError != nil {
+		m.cfg.OnError(fmt.Errorf("recv: %w", err))
+	}
 }
 
 func (m *Monitor) handleRecv(pkt *probing.Packet) {
