@@ -19,11 +19,12 @@ import (
 var version = "dev"
 
 type options struct {
-	target    string
-	interval  time.Duration
-	threshold int
-	notify    bool
-	debug     bool
+	target     string
+	interval   time.Duration
+	threshold  int
+	notify     bool
+	debug      bool
+	privileged bool
 }
 
 func main() {
@@ -68,6 +69,7 @@ when connectivity state changes.`,
 	rootCmd.Flags().IntVarP(&opts.threshold, "threshold", "t", 3, "Consecutive failures before declaring down")
 	rootCmd.Flags().BoolVarP(&opts.notify, "notify", "n", true, "Send desktop notifications on state changes")
 	rootCmd.Flags().BoolVar(&opts.debug, "debug", false, "Show individual ping results")
+	rootCmd.Flags().BoolVar(&opts.privileged, "privileged", false, "Use privileged raw ICMP sockets")
 
 	return rootCmd
 }
@@ -84,9 +86,10 @@ func buildConfig(args []string, opts options) (monitor.Config, *slog.Logger, err
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
 	cfg := monitor.Config{
-		Target:    opts.target,
-		Interval:  opts.interval,
-		Threshold: opts.threshold,
+		Target:     opts.target,
+		Interval:   opts.interval,
+		Threshold:  opts.threshold,
+		Privileged: opts.privileged,
 		OnStateChange: func(e monitor.Event) {
 			switch e.State {
 			case monitor.StateDown:

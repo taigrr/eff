@@ -23,6 +23,9 @@ eff --interval 5s --threshold 5 8.8.8.8
 # Disable notifications (log only)
 eff --notify=false
 
+# Use raw ICMP sockets when running with the required privileges
+eff --privileged
+
 # Debug mode (show each ping)
 eff --debug
 ```
@@ -34,6 +37,7 @@ eff --debug
 | `--interval, -i` | `3s` | Ping interval |
 | `--threshold, -t` | `3` | Consecutive failures before declaring down |
 | `--notify, -n` | `true` | Send desktop notifications |
+| `--privileged` | `false` | Use privileged raw ICMP sockets |
 | `--debug` | `false` | Show individual ping results |
 
 ## How It Works
