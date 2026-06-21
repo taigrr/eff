@@ -18,14 +18,27 @@ import (
 
 var version = "dev"
 
+type options struct {
+	target    string
+	interval  time.Duration
+	threshold int
+	notify    bool
+	debug     bool
+}
+
 func main() {
-	var (
-		target    string
-		interval  time.Duration
-		threshold int
-		notify    bool
-		debug     bool
-	)
+	cmd := newRootCmd(func(ctx context.Context, cfg monitor.Config) error {
+		m := monitor.New(cfg)
+		return m.Run(ctx)
+	})
+
+	if err := fang.Execute(context.Background(), cmd); err != nil {
+		os.Exit(1)
+	}
+}
+
+func newRootCmd(runMonitor func(context.Context, monitor.Config) error) *cobra.Command {
+	opts := options{}
 
 	rootCmd := &cobra.Command{
 		Use:   "eff [target]",
@@ -38,69 +51,75 @@ when connectivity state changes.`,
 		Version: version,
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				target = args[0]
+			cfg, logger, err := buildConfig(args, opts)
+			if err != nil {
+				return err
 			}
 
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer cancel()
 
-			level := slog.LevelInfo
-			if debug {
-				level = slog.LevelDebug
-			}
-			logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-
-			cfg := monitor.Config{
-				Target:    target,
-				Interval:  interval,
-				Threshold: threshold,
-				OnStateChange: func(e monitor.Event) {
-					switch e.State {
-					case monitor.StateDown:
-						msg := fmt.Sprintf("Network DOWN — %s unreachable", e.Target)
-						logger.Warn(msg)
-						if notify {
-							sendNotification("eff: Network Down", msg, "critical")
-						}
-					case monitor.StateUp:
-						msg := fmt.Sprintf("Network UP — %s reachable (was down for %s)",
-							e.Target, e.Duration.Round(time.Second))
-						logger.Info(msg)
-						if notify {
-							sendNotification("eff: Network Restored", msg, "normal")
-						}
-					}
-				},
-				OnPing: func(seq int, rtt time.Duration) {
-					logger.Debug("ping", "seq", seq, "rtt", rtt.Round(time.Microsecond))
-				},
-				OnError: func(err error) {
-					logger.Error("ping error", "error", err)
-				},
-			}
-
-			if interval <= 0 {
-				return fmt.Errorf("interval must be positive, got %s", interval)
-			}
-			if threshold < 1 {
-				return fmt.Errorf("threshold must be at least 1, got %d", threshold)
-			}
-
-			m := monitor.New(cfg)
 			logger.Info("monitoring", "target", cfg.Target, "interval", cfg.Interval, "threshold", cfg.Threshold)
-			return m.Run(ctx)
+			return runMonitor(ctx, cfg)
 		},
 	}
 
-	rootCmd.Flags().DurationVarP(&interval, "interval", "i", 3*time.Second, "Ping interval")
-	rootCmd.Flags().IntVarP(&threshold, "threshold", "t", 3, "Consecutive failures before declaring down")
-	rootCmd.Flags().BoolVarP(&notify, "notify", "n", true, "Send desktop notifications on state changes")
-	rootCmd.Flags().BoolVar(&debug, "debug", false, "Show individual ping results")
+	rootCmd.Flags().DurationVarP(&opts.interval, "interval", "i", 3*time.Second, "Ping interval")
+	rootCmd.Flags().IntVarP(&opts.threshold, "threshold", "t", 3, "Consecutive failures before declaring down")
+	rootCmd.Flags().BoolVarP(&opts.notify, "notify", "n", true, "Send desktop notifications on state changes")
+	rootCmd.Flags().BoolVar(&opts.debug, "debug", false, "Show individual ping results")
 
-	if err := fang.Execute(context.Background(), rootCmd); err != nil {
-		os.Exit(1)
+	return rootCmd
+}
+
+func buildConfig(args []string, opts options) (monitor.Config, *slog.Logger, error) {
+	if len(args) > 0 {
+		opts.target = args[0]
 	}
+
+	level := slog.LevelInfo
+	if opts.debug {
+		level = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+
+	cfg := monitor.Config{
+		Target:    opts.target,
+		Interval:  opts.interval,
+		Threshold: opts.threshold,
+		OnStateChange: func(e monitor.Event) {
+			switch e.State {
+			case monitor.StateDown:
+				msg := fmt.Sprintf("Network DOWN — %s unreachable", e.Target)
+				logger.Warn(msg)
+				if opts.notify {
+					sendNotification("eff: Network Down", msg, "critical")
+				}
+			case monitor.StateUp:
+				msg := fmt.Sprintf("Network UP — %s reachable (was down for %s)",
+					e.Target, e.Duration.Round(time.Second))
+				logger.Info(msg)
+				if opts.notify {
+					sendNotification("eff: Network Restored", msg, "normal")
+				}
+			}
+		},
+		OnPing: func(seq int, rtt time.Duration) {
+			logger.Debug("ping", "seq", seq, "rtt", rtt.Round(time.Microsecond))
+		},
+		OnError: func(err error) {
+			logger.Error("ping error", "error", err)
+		},
+	}
+	if cfg.Target == "" {
+		cfg.Target = "1.1.1.1"
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return monitor.Config{}, nil, err
+	}
+
+	return cfg, logger, nil
 }
 
 func sendNotification(title, body, urgency string) {
