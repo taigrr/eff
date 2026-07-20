@@ -205,6 +205,39 @@ func TestStatsReturnsSnapshot(t *testing.T) {
 	}
 }
 
+func TestHandleFinishStoresPingerStats(t *testing.T) {
+	m := New(Config{})
+
+	m.handleFinish(&probing.Statistics{
+		PacketsSent: 10,
+		PacketsRecv: 8,
+		PacketLoss:  20.0,
+		MinRtt:      2 * time.Millisecond,
+		AvgRtt:      4 * time.Millisecond,
+		MaxRtt:      9 * time.Millisecond,
+	})
+
+	got := m.Stats()
+	if got.PacketsSent != 10 {
+		t.Errorf("PacketsSent = %d, want 10", got.PacketsSent)
+	}
+	if got.PacketsRecv != 8 {
+		t.Errorf("PacketsRecv = %d, want 8", got.PacketsRecv)
+	}
+	if got.PacketLoss != 20.0 {
+		t.Errorf("PacketLoss = %f, want 20.0", got.PacketLoss)
+	}
+	if got.MinRTT != 2*time.Millisecond {
+		t.Errorf("MinRTT = %s, want 2ms", got.MinRTT)
+	}
+	if got.AvgRTT != 4*time.Millisecond {
+		t.Errorf("AvgRTT = %s, want 4ms", got.AvgRTT)
+	}
+	if got.MaxRTT != 9*time.Millisecond {
+		t.Errorf("MaxRTT = %s, want 9ms", got.MaxRTT)
+	}
+}
+
 func TestDownStayDownOnMoreFailures(t *testing.T) {
 	var eventCount int
 	m := New(Config{
