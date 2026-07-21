@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,35 @@ func TestBuildConfigRejectsInvalidValues(t *testing.T) {
 			}
 			if got := err.Error(); !strings.HasPrefix(got, tt.want) {
 				t.Fatalf("buildConfig() error = %q, want prefix %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildConfigSetsLoggerLevel(t *testing.T) {
+	tests := []struct {
+		name      string
+		debug     bool
+		wantDebug bool
+	}{
+		{name: "default level", debug: false, wantDebug: false},
+		{name: "debug level", debug: true, wantDebug: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, logger, err := buildConfig(nil, options{
+				interval:  time.Second,
+				threshold: 2,
+				debug:     tt.debug,
+			})
+			if err != nil {
+				t.Fatalf("buildConfig() error = %v", err)
+			}
+
+			gotDebug := logger.Handler().Enabled(context.Background(), slog.LevelDebug)
+			if gotDebug != tt.wantDebug {
+				t.Fatalf("debug enabled = %t, want %t", gotDebug, tt.wantDebug)
 			}
 		})
 	}
