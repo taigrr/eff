@@ -82,7 +82,8 @@ type Config struct {
 	OnError func(err error)
 }
 
-func (c *Config) defaults() {
+// Normalize applies defaults and validates the resulting configuration.
+func (c *Config) Normalize() error {
 	if c.Target == "" {
 		c.Target = "1.1.1.1"
 	}
@@ -92,6 +93,7 @@ func (c *Config) defaults() {
 	if c.Threshold == 0 {
 		c.Threshold = 3
 	}
+	return c.Validate()
 }
 
 // Validate reports whether the configuration is internally consistent.
@@ -121,13 +123,13 @@ type Monitor struct {
 
 // New creates a new Monitor with the given configuration.
 func New(cfg Config) *Monitor {
-	cfg.defaults()
+	_ = cfg.Normalize()
 	return &Monitor{cfg: cfg, state: StateUnknown}
 }
 
 // Run starts the monitor and blocks until the context is cancelled.
 func (m *Monitor) Run(ctx context.Context) error {
-	if err := m.cfg.Validate(); err != nil {
+	if err := m.cfg.Normalize(); err != nil {
 		return err
 	}
 

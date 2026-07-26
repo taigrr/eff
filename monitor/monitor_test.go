@@ -25,9 +25,11 @@ func TestStateString(t *testing.T) {
 	}
 }
 
-func TestConfigDefaults(t *testing.T) {
+func TestConfigNormalize(t *testing.T) {
 	cfg := Config{}
-	cfg.defaults()
+	if err := cfg.Normalize(); err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
 
 	if cfg.Target != "1.1.1.1" {
 		t.Errorf("default target = %q, want 1.1.1.1", cfg.Target)
@@ -40,13 +42,15 @@ func TestConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestConfigDefaultsPreserve(t *testing.T) {
+func TestConfigNormalizePreservesExplicitValues(t *testing.T) {
 	cfg := Config{
 		Target:    "8.8.8.8",
 		Interval:  5 * time.Second,
 		Threshold: 5,
 	}
-	cfg.defaults()
+	if err := cfg.Normalize(); err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
 
 	if cfg.Target != "8.8.8.8" {
 		t.Errorf("target = %q, want 8.8.8.8", cfg.Target)
@@ -56,6 +60,34 @@ func TestConfigDefaultsPreserve(t *testing.T) {
 	}
 	if cfg.Threshold != 5 {
 		t.Errorf("threshold = %d, want 5", cfg.Threshold)
+	}
+}
+
+func TestConfigValidateRejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  Config
+	}{
+		{
+			name: "empty target",
+			cfg:  Config{Target: "", Interval: time.Second, Threshold: 1},
+		},
+		{
+			name: "negative interval",
+			cfg:  Config{Target: "1.1.1.1", Interval: -time.Second, Threshold: 1},
+		},
+		{
+			name: "zero threshold",
+			cfg:  Config{Target: "1.1.1.1", Interval: time.Second, Threshold: 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.cfg.Validate(); err == nil {
+				t.Fatal("Validate() error = nil, want non-nil")
+			}
+		})
 	}
 }
 
@@ -205,6 +237,39 @@ func TestStatsReturnsSnapshot(t *testing.T) {
 	}
 }
 
+func TestHandleFinishStoresPingerStats(t *testing.T) {
+	m := New(Config{})
+
+	m.handleFinish(&probing.Statistics{
+		PacketsSent: 10,
+		PacketsRecv: 8,
+		PacketLoss:  20.0,
+		MinRtt:      2 * time.Millisecond,
+		AvgRtt:      4 * time.Millisecond,
+		MaxRtt:      9 * time.Millisecond,
+	})
+
+	got := m.Stats()
+	if got.PacketsSent != 10 {
+		t.Errorf("PacketsSent = %d, want 10", got.PacketsSent)
+	}
+	if got.PacketsRecv != 8 {
+		t.Errorf("PacketsRecv = %d, want 8", got.PacketsRecv)
+	}
+	if got.PacketLoss != 20.0 {
+		t.Errorf("PacketLoss = %f, want 20.0", got.PacketLoss)
+	}
+	if got.MinRTT != 2*time.Millisecond {
+		t.Errorf("MinRTT = %s, want 2ms", got.MinRTT)
+	}
+	if got.AvgRTT != 4*time.Millisecond {
+		t.Errorf("AvgRTT = %s, want 4ms", got.AvgRTT)
+	}
+	if got.MaxRTT != 9*time.Millisecond {
+		t.Errorf("MaxRTT = %s, want 9ms", got.MaxRTT)
+	}
+}
+
 func TestDownStayDownOnMoreFailures(t *testing.T) {
 	var eventCount int
 	m := New(Config{
@@ -320,33 +385,10 @@ func TestThresholdOneImmediateDown(t *testing.T) {
 	}
 }
 
-func TestConfigValidateRejectsInvalidValues(t *testing.T) {
-	tests := []struct {
-		name string
-		cfg  Config
-	}{
-		{name: "empty target", cfg: Config{Target: "", Interval: time.Second, Threshold: 1}},
-		{name: "zero interval", cfg: Config{Target: "1.1.1.1", Interval: 0, Threshold: 1}},
-		{name: "negative interval", cfg: Config{Target: "1.1.1.1", Interval: -time.Second, Threshold: 1}},
-		{name: "zero threshold", cfg: Config{Target: "1.1.1.1", Interval: time.Second, Threshold: 0}},
-		{name: "negative threshold", cfg: Config{Target: "1.1.1.1", Interval: time.Second, Threshold: -1}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.cfg.Validate(); err == nil {
-				t.Fatalf("Validate() error = nil, want error")
-			}
-		})
-	}
-}
-
-func TestConfigValidateAcceptsDefaults(t *testing.T) {
+func TestConfigNormalizeAcceptsDefaults(t *testing.T) {
 	cfg := Config{}
-	cfg.defaults()
-
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v, want nil", err)
+	if err := cfg.Normalize(); err != nil {
+		t.Fatalf("Normalize() error = %v, want nil", err)
 	}
 }
 
