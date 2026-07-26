@@ -1,5 +1,9 @@
 # eff
 
+[![Test](https://github.com/taigrr/eff/actions/workflows/test.yml/badge.svg)](https://github.com/taigrr/eff/actions/workflows/test.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/taigrr/eff.svg)](https://pkg.go.dev/github.com/taigrr/eff)
+[![Go Report Card](https://goreportcard.com/badge/github.com/taigrr/eff)](https://goreportcard.com/report/github.com/taigrr/eff)
+
 Network connectivity monitor. Continuously pings a target and sends desktop notifications when your connection drops or recovers.
 
 ## Install
@@ -82,3 +86,7 @@ m.Run(ctx)
 ## Background
 
 Built because Xfinity says 500mbps but streams at 0.1mbps. This tool tells you the moment your connection actually drops — no more wondering if it's you or the ISP.
+
+## License
+
+Released under the [0BSD](LICENSE) license.

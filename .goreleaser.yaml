@@ -12,7 +12,7 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     files:
       - README.md
@@ -32,6 +32,18 @@ nfpms:
       - src: contrib/eff.service
         dst: /usr/lib/systemd/user/eff.service
         type: config
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
 
 release:
   name_template: "v{{ .Version }}"

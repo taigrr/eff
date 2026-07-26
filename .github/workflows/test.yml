@@ -18,6 +18,10 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: go mod tidy
+        run: go mod tidy && git diff --exit-code -- go.mod go.sum
       - run: go test -race ./...
       - run: go vet ./...
       - run: staticcheck ./...
