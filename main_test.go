@@ -106,7 +106,7 @@ func TestNewRootCmdPassesConfigToRunner(t *testing.T) {
 	})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--interval", "5s", "--threshold", "4", "--notify=false", "8.8.4.4"})
+	cmd.SetArgs([]string{"--interval", "5s", "--threshold", "4", "--notify=false", "--privileged", "8.8.4.4"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -119,6 +119,9 @@ func TestNewRootCmdPassesConfigToRunner(t *testing.T) {
 	}
 	if got.Threshold != 4 {
 		t.Fatalf("Threshold = %d, want 4", got.Threshold)
+	}
+	if !got.Privileged {
+		t.Fatal("Privileged = false, want true")
 	}
 }
 
