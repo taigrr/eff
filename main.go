@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -26,7 +27,7 @@ func init() {
 	}
 	if info, ok := debug.ReadBuildInfo(); ok {
 		if v := info.Main.Version; v != "" && v != "(devel)" {
-			version = v
+			version = strings.TrimPrefix(v, "v")
 		}
 	}
 }
