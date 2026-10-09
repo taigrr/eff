@@ -1,6 +1,6 @@
 module github.com/taigrr/eff
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/charmbracelet/fang v1.0.0
