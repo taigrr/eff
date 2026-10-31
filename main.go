@@ -71,7 +71,7 @@ when connectivity state changes.`,
 				return err
 			}
 
-			ctx, cancel := signal.NotifyContext(context.Background(), monitorSignals()...)
+			ctx, cancel := signal.NotifyContext(cmd.Context(), monitorSignals()...)
 			defer cancel()
 
 			logger.Info("monitoring", "target", cfg.Target, "interval", cfg.Interval, "threshold", cfg.Threshold)
