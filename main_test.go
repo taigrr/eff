@@ -215,3 +215,41 @@ func TestNotificationCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestRootCommandPropagatesCancellation(t *testing.T) {
+	for _, cancelBeforeRun := range []bool{true, false} {
+		name := "during run"
+		if cancelBeforeRun {
+			name = "before run"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if cancelBeforeRun {
+				cancel()
+			}
+
+			called := false
+			cmd := newRootCmd(func(monitorCtx context.Context, _ monitor.Config) error {
+				called = true
+				cancel()
+				select {
+				case <-monitorCtx.Done():
+					return monitorCtx.Err()
+				case <-time.After(time.Second):
+					t.Error("monitor context did not receive caller cancellation")
+					return nil
+				}
+			})
+			cmd.SetArgs([]string{"--notify=false"})
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+			if err := cmd.ExecuteContext(ctx); !errors.Is(err, context.Canceled) {
+				t.Errorf("ExecuteContext() error = %v, want context.Canceled", err)
+			}
+			if !called {
+				t.Error("monitor was not called")
+			}
+		})
+	}
+}
