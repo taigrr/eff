@@ -191,7 +191,8 @@ func (m *Monitor) pingerSendError(_ *probing.Packet, err error) {
 }
 
 func (m *Monitor) pingerRecvError(err error) {
-	if neterr, ok := err.(*net.OpError); ok && neterr.Timeout() {
+	var neterr net.Error
+	if errors.As(err, &neterr) && neterr.Timeout() {
 		m.handleFailure()
 		return
 	}
