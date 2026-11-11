@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -477,5 +478,29 @@ func TestSendErrorInvokesCallbackAndCountsFailure(t *testing.T) {
 	}
 	if m.State() != StateDown {
 		t.Fatalf("state = %v, want down after threshold", m.State())
+	}
+}
+
+func TestWrappedRecvTimeoutCountsFailureWithoutErrorCallback(t *testing.T) {
+	for _, timeout := range []error{
+		timeoutErr{},
+		&net.OpError{Err: timeoutErr{}},
+		fmt.Errorf("reading socket: %w", &net.OpError{Err: timeoutErr{}}),
+	} {
+		t.Run(timeout.Error(), func(t *testing.T) {
+			errorCalls := 0
+			monitor := New(Config{Threshold: 2, OnError: func(error) { errorCalls++ }})
+			monitor.pingerRecvError(timeout)
+			if monitor.State() != StateUnknown {
+				t.Fatalf("state before threshold = %v, want unknown", monitor.State())
+			}
+			monitor.pingerRecvError(timeout)
+			if monitor.State() != StateDown {
+				t.Fatalf("state at threshold = %v, want down", monitor.State())
+			}
+			if errorCalls != 0 {
+				t.Fatalf("OnError calls = %d, want 0 for timeout", errorCalls)
+			}
+		})
 	}
 }
