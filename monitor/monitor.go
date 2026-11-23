@@ -133,6 +133,10 @@ func (m *Monitor) Run(ctx context.Context) error {
 		return err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	pinger, err := probing.NewPinger(m.cfg.Target)
 	if err != nil {
 		return fmt.Errorf("creating pinger for %s: %w", m.cfg.Target, err)
@@ -148,12 +152,7 @@ func (m *Monitor) Run(ctx context.Context) error {
 	pinger.OnSendError = m.pingerSendError
 	pinger.OnRecvError = m.pingerRecvError
 
-	go func() {
-		<-ctx.Done()
-		pinger.Stop()
-	}()
-
-	return pinger.Run()
+	return pinger.RunWithContext(ctx)
 }
 
 // State returns the current connectivity state.
