@@ -47,7 +47,7 @@ func main() {
 		return m.Run(ctx)
 	})
 
-	if err := fang.Execute(context.Background(), cmd); err != nil {
+	if err := fang.Execute(context.Background(), cmd, fang.WithVersion(version)); err != nil {
 		os.Exit(1)
 	}
 }
